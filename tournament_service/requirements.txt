@@ -1,0 +1,9 @@
+asgiref==3.11.0
+dj-database-url==3.0.1
+Django==6.0
+djangorestframework==3.16.1
+pathlib==1.0.1
+psycopg2-binary==2.9.11
+setuptools==80.9.0
+sqlparse==0.5.4
+wheel==0.45.1
