@@ -23,4 +23,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("health/", health),
     path("api/", include("players.urls")),
+    path("api/", include("tournaments.urls")),
 ]
