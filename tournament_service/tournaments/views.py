@@ -8,6 +8,9 @@ from .serializers import AddParticipantSerializer, AddGameResultSerializer, Tour
 from .models import Tournament, TournamentParticipant, Game
 from players.models import Player
 
+from collections import defaultdict
+
+
 
 class TournamentsViewSet(viewsets.ModelViewSet):
     queryset = Tournament.objects.all()
@@ -203,6 +206,93 @@ def tournament_status(request, tournament_id: int):
             "total_required_games": total_required_games,
             "games_played": games_played,
             "status": status_str,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def tournament_leaderboard(request, tournament_id: int):
+    """
+    Return the leaderboard for a tournament.
+
+    URL:
+      GET /api/tournaments/<tournament_id>/leaderboard/
+
+    Leaderboard entry:
+      - player_id
+      - player_name
+      - points (2 win, 1 draw, 0 loss)
+      - wins, draws, losses, games_played
+    """
+    try:
+        tournament = Tournament.objects.get(id=tournament_id)
+    except Tournament.DoesNotExist:
+        return Response({"detail": "Tournament not found."},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    participants = TournamentParticipant.objects.select_related("player").filter(tournament=tournament)
+    games = Game.objects.select_related(
+        "home_participant__player",
+        "away_participant__player",
+    ).filter(tournament=tournament)
+
+    # Initialize stats per player
+    stats = defaultdict(lambda: {
+        "points": 0,
+        "wins": 0,
+        "draws": 0,
+        "losses": 0,
+        "games_played": 0,
+    })
+
+    for p in participants:
+        stats[p.player_id]
+
+    for g in games:
+        home_player = g.home_participant.player
+        away_player = g.away_participant.player
+
+        stats[home_player.id]["games_played"] += 1
+        stats[away_player.id]["games_played"] += 1
+
+        if g.home_score > g.away_score:
+            stats[home_player.id]["points"] += 2
+            stats[home_player.id]["wins"] += 1
+            stats[away_player.id]["losses"] += 1
+        elif g.home_score < g.away_score:
+            stats[away_player.id]["points"] += 2
+            stats[away_player.id]["wins"] += 1
+            stats[home_player.id]["losses"] += 1
+        else:
+            stats[home_player.id]["points"] += 1
+            stats[away_player.id]["points"] += 1
+            stats[home_player.id]["draws"] += 1
+            stats[away_player.id]["draws"] += 1
+
+    leaderboard = []
+    for p in participants:
+        s = stats[p.player_id]
+        leaderboard.append(
+            {
+                "player_id": p.player_id,
+                "player_name": p.player.name,
+                "points": s["points"],
+                "wins": s["wins"],
+                "draws": s["draws"],
+                "losses": s["losses"],
+                "games_played": s["games_played"],
+            }
+        )
+
+    # Sort by points desc, then name for deterministic order
+    leaderboard.sort(key=lambda e: (-e["points"], e["player_name"]))
+
+    return Response(
+        {
+            "tournament_id": tournament.id,
+            "tournament_name": tournament.name,
+            "leaderboard": leaderboard,
         },
         status=status.HTTP_200_OK,
     )
