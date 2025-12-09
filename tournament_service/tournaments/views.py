@@ -160,3 +160,49 @@ def add_game_result(request, tournament_id: int):
     )
 
     return Response(GameSerializer(game).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+def tournament_status(request, tournament_id: int):
+    """
+    Return the status of a tournament.
+
+    URL:
+      GET /api/tournaments/<tournament_id>/status/
+
+    Status:
+      - in_planning: participants exist, 0 games
+      - started:     some games played, but not all
+      - finished:    everybody has played everybody once
+    """
+    try:
+        tournament = Tournament.objects.get(id=tournament_id)
+    except Tournament.DoesNotExist:
+        return Response({"detail": "Tournament not found."},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    participants = TournamentParticipant.objects.filter(tournament=tournament)
+    games = Game.objects.filter(tournament=tournament)
+
+    n = participants.count()
+    games_played = games.count()
+    total_required_games = n * (n - 1) // 2 if n >= 2 else 0
+
+    if games_played == 0:
+        status_str = "in_planning"
+    elif games_played < total_required_games:
+        status_str = "started"
+    else:
+        status_str = "finished"
+
+    return Response(
+        {
+            "tournament_id": tournament.id,
+            "tournament_name": tournament.name,
+            "participants_count": n,
+            "total_required_games": total_required_games,
+            "games_played": games_played,
+            "status": status_str,
+        },
+        status=status.HTTP_200_OK,
+    )

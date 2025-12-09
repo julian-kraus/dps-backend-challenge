@@ -4,7 +4,6 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from tournaments.models import Tournament, TournamentParticipant
-from players.models import Player
 
 
 # ====================================================
