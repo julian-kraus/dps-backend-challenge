@@ -26,3 +26,9 @@ class AddParticipantSerializer(serializers.Serializer):
 
     def validate_player_id(self, value):
         return value
+
+
+class AddGameResultSerializer(serializers.Serializer):
+    home_participant = serializers.IntegerField()
+    away_participant = serializers.IntegerField()
+    winner = serializers.IntegerField(allow_null=True)
