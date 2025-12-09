@@ -2,6 +2,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from .serializers import AddParticipantSerializer, AddGameResultSerializer, TournamentsSerializer, GameSerializer
 
@@ -13,10 +14,21 @@ from collections import defaultdict
 
 
 class TournamentsViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing tournaments.
+    
+    Provides CRUD operations for tournaments.
+    """
     queryset = Tournament.objects.all()
     serializer_class = TournamentsSerializer
 
 
+@extend_schema(
+    request=AddParticipantSerializer,
+    responses={201: AddParticipantSerializer, 400: None, 404: None},
+    summary="Add a player to a tournament",
+    description="Add a player as a participant to a tournament. Maximum 5 participants per tournament.",
+)
 @api_view(["POST"])
 def add_participant(request, tournament_id: int):
     """
@@ -74,9 +86,12 @@ def add_participant(request, tournament_id: int):
     )
 
 
-
-
-
+@extend_schema(
+    request=AddGameResultSerializer,
+    responses={201: GameSerializer, 400: None, 404: None},
+    summary="Record a game result",
+    description="Record the result of a game between two participants. Winner can be null for a draw.",
+)
 @api_view(["POST"])
 def add_game_result(request, tournament_id: int):
     """
@@ -165,6 +180,39 @@ def add_game_result(request, tournament_id: int):
     return Response(GameSerializer(game).data, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "tournament_id": {"type": "integer"},
+                "tournament_name": {"type": "string"},
+                "participants_count": {"type": "integer"},
+                "total_required_games": {"type": "integer"},
+                "games_played": {"type": "integer"},
+                "status": {"type": "string", "enum": ["in_planning", "started", "finished"]},
+                "leaderboard": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "player_id": {"type": "integer"},
+                            "player_name": {"type": "string"},
+                            "points": {"type": "integer"},
+                            "wins": {"type": "integer"},
+                            "draws": {"type": "integer"},
+                            "losses": {"type": "integer"},
+                            "games_played": {"type": "integer"},
+                        },
+                    },
+                },
+            },
+        },
+        404: None,
+    },
+    summary="Get tournament status and leaderboard",
+    description="Returns the current status of a tournament (in_planning, started, or finished) along with the leaderboard showing all participants sorted by points.",
+)
 @api_view(["GET"])
 def tournament_status(request, tournament_id: int):
     """
@@ -194,8 +242,11 @@ def tournament_status(request, tournament_id: int):
 
     n = participants.count()
     games_played = games.count()
+    # Round-robin: each participant plays every other participant once
+    # Formula: n * (n - 1) / 2 (only valid for n >= 2)
     total_required_games = n * (n - 1) // 2 if n >= 2 else 0
 
+    # Determine tournament status
     if games_played == 0:
         status_str = "in_planning"
     elif games_played < total_required_games:

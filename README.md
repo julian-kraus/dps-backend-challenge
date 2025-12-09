@@ -50,3 +50,9 @@ After running the script you should see:
 	•	Participants added to the tournament
 	•	Status changing from in_planning to started
 	•	A leaderboard with calculated points
+
+## API Documentation
+
+Interactive API documentation is available via Swagger UI:
+
+- **Swagger UI**: http://localhost:8000/api/docs/
