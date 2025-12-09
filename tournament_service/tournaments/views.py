@@ -168,7 +168,7 @@ def add_game_result(request, tournament_id: int):
 @api_view(["GET"])
 def tournament_status(request, tournament_id: int):
     """
-    Return the status of a tournament.
+    Return the status of a tournament and its leaderboard.
 
     URL:
       GET /api/tournaments/<tournament_id>/status/
@@ -177,53 +177,8 @@ def tournament_status(request, tournament_id: int):
       - in_planning: participants exist, 0 games
       - started:     some games played, but not all
       - finished:    everybody has played everybody once
-    """
-    try:
-        tournament = Tournament.objects.get(id=tournament_id)
-    except Tournament.DoesNotExist:
-        return Response({"detail": "Tournament not found."},
-                        status=status.HTTP_404_NOT_FOUND)
 
-    participants = TournamentParticipant.objects.filter(tournament=tournament)
-    games = Game.objects.filter(tournament=tournament)
-
-    n = participants.count()
-    games_played = games.count()
-    total_required_games = n * (n - 1) // 2 if n >= 2 else 0
-
-    if games_played == 0:
-        status_str = "in_planning"
-    elif games_played < total_required_games:
-        status_str = "started"
-    else:
-        status_str = "finished"
-
-    return Response(
-        {
-            "tournament_id": tournament.id,
-            "tournament_name": tournament.name,
-            "participants_count": n,
-            "total_required_games": total_required_games,
-            "games_played": games_played,
-            "status": status_str,
-        },
-        status=status.HTTP_200_OK,
-    )
-
-
-@api_view(["GET"])
-def tournament_leaderboard(request, tournament_id: int):
-    """
-    Return the leaderboard for a tournament.
-
-    URL:
-      GET /api/tournaments/<tournament_id>/leaderboard/
-
-    Leaderboard entry:
-      - player_id
-      - player_name
-      - points (2 win, 1 draw, 0 loss)
-      - wins, draws, losses, games_played
+    Returns both status and leaderboard (participants sorted by points descending).
     """
     try:
         tournament = Tournament.objects.get(id=tournament_id)
@@ -237,7 +192,18 @@ def tournament_leaderboard(request, tournament_id: int):
         "away_participant__player",
     ).filter(tournament=tournament)
 
-    # Initialize stats per player
+    n = participants.count()
+    games_played = games.count()
+    total_required_games = n * (n - 1) // 2 if n >= 2 else 0
+
+    if games_played == 0:
+        status_str = "in_planning"
+    elif games_played < total_required_games:
+        status_str = "started"
+    else:
+        status_str = "finished"
+
+    # Calculate leaderboard
     stats = defaultdict(lambda: {
         "points": 0,
         "wins": 0,
@@ -292,6 +258,10 @@ def tournament_leaderboard(request, tournament_id: int):
         {
             "tournament_id": tournament.id,
             "tournament_name": tournament.name,
+            "participants_count": n,
+            "total_required_games": total_required_games,
+            "games_played": games_played,
+            "status": status_str,
             "leaderboard": leaderboard,
         },
         status=status.HTTP_200_OK,

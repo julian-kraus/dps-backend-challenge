@@ -67,7 +67,7 @@ PART_C_JSON=$(curl -s -X POST "$BASE/tournaments/$TOURNAMENT_ID/participants/" \
 pretty "$PART_C_JSON"
 PART_C_ID=$(echo "$PART_C_JSON" | jq -r '.id')
 
-print "Status (expected: in_planning)"
+print "Status (expected: in_planning) - includes leaderboard"
 STATUS1_JSON=$(curl -s "$BASE/tournaments/$TOURNAMENT_ID/status/")
 pretty "$STATUS1_JSON"
 
@@ -92,12 +92,8 @@ GAME2_JSON=$(curl -s -X POST "$BASE/tournaments/$TOURNAMENT_ID/games/" \
   }")
 pretty "$GAME2_JSON"
 
-print "Status (expected: started)"
+print "Status (expected: started) - includes leaderboard"
 STATUS2_JSON=$(curl -s "$BASE/tournaments/$TOURNAMENT_ID/status/")
 pretty "$STATUS2_JSON"
-
-print "Leaderboard"
-LEADERBOARD_JSON=$(curl -s "$BASE/tournaments/$TOURNAMENT_ID/leaderboard/")
-pretty "$LEADERBOARD_JSON"
 
 echo -e "\n=== Script completed ===\n"

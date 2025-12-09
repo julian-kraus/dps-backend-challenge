@@ -20,9 +20,6 @@ class TournamentStatusLeaderboardTests(APITestCase):
     def _status_url(self, tournament_id: int):
         return reverse("tournament-status", kwargs={"tournament_id": tournament_id})
 
-    def _leaderboard_url(self, tournament_id: int):
-        return reverse("tournament-leaderboard", kwargs={"tournament_id": tournament_id})
-
     @pytest.mark.order(18)
     def test_status_tournament_not_found(self):
         url = self._status_url(9999)
@@ -49,6 +46,13 @@ class TournamentStatusLeaderboardTests(APITestCase):
         self.assertEqual(response.data["participants_count"], 2)
         self.assertEqual(response.data["games_played"], 0)
         self.assertEqual(response.data["total_required_games"], 1)  # 2 * 1 / 2
+        # Status endpoint should include leaderboard
+        self.assertIn("leaderboard", response.data)
+        self.assertEqual(len(response.data["leaderboard"]), 2)
+        # All participants should have 0 points with no games
+        for entry in response.data["leaderboard"]:
+            self.assertEqual(entry["points"], 0)
+            self.assertEqual(entry["games_played"], 0)
 
     @pytest.mark.order(20)
     def test_status_started_and_finished(self):
@@ -66,13 +70,13 @@ class TournamentStatusLeaderboardTests(APITestCase):
         pb = self._create_participant(t, pB)
         pc = self._create_participant(t, pC)
 
-        # One game: A beats B (scores: 1:0)
+        # One game: A beats B (A gets 2 points, B gets 0)
         Game.objects.create(
             tournament=t,
             home_participant=pa,
             away_participant=pb,
-            home_score=1,
-            away_score=0,
+            home_score=2,  # A wins -> 2 points
+            away_score=0,  # B loses -> 0 points
         )
 
         url = self._status_url(t.id)
@@ -81,21 +85,29 @@ class TournamentStatusLeaderboardTests(APITestCase):
         self.assertEqual(resp_started.data["status"], "started")
         self.assertEqual(resp_started.data["games_played"], 1)
         self.assertEqual(resp_started.data["total_required_games"], 3)
+        self.assertIn("leaderboard", resp_started.data)
+        leaderboard_started = resp_started.data["leaderboard"]
+        self.assertEqual(len(leaderboard_started), 3)
+        # A should have 2 points, B and C should have 0
+        points_by_name = {e["player_name"]: e["points"] for e in leaderboard_started}
+        self.assertEqual(points_by_name["A"], 2)
+        self.assertEqual(points_by_name["B"], 0)
+        self.assertEqual(points_by_name["C"], 0)
 
         # Add remaining games: A vs C (draw), B vs C (C wins)
         Game.objects.create(
             tournament=t,
             home_participant=pa,
             away_participant=pc,
-            home_score=1,
-            away_score=1,  # draw
+            home_score=1,  # draw -> both get 1 point
+            away_score=1,
         )
         Game.objects.create(
             tournament=t,
             home_participant=pb,
             away_participant=pc,
-            home_score=0,
-            away_score=1,  # C wins
+            home_score=0,  # C wins -> C gets 2, B gets 0
+            away_score=2,
         )
 
         resp_finished = self.client.get(url)
@@ -103,10 +115,20 @@ class TournamentStatusLeaderboardTests(APITestCase):
         self.assertEqual(resp_finished.data["status"], "finished")
         self.assertEqual(resp_finished.data["games_played"], 3)
         self.assertEqual(resp_finished.data["total_required_games"], 3)
+        self.assertIn("leaderboard", resp_finished.data)
+        leaderboard_finished = resp_finished.data["leaderboard"]
+        self.assertEqual(len(leaderboard_finished), 3)
+        # Final points: A = 2+1=3, B = 0+0=0, C = 1+2=3
+        # Sorted by points desc, then name: A (3), C (3), B (0)
+        points_by_name_final = {e["player_name"]: e["points"] for e in leaderboard_finished}
+        self.assertEqual(points_by_name_final["A"], 3)
+        self.assertEqual(points_by_name_final["B"], 0)
+        self.assertEqual(points_by_name_final["C"], 3)
 
     @pytest.mark.order(21)
     def test_leaderboard_tournament_not_found(self):
-        url = self._leaderboard_url(9999)
+        """Test that status endpoint returns 404 for non-existent tournament."""
+        url = self._status_url(9999)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn("Tournament not found", response.data["detail"])
@@ -122,10 +144,11 @@ class TournamentStatusLeaderboardTests(APITestCase):
         self._create_participant(t, p1)
         self._create_participant(t, p2)
 
-        url = self._leaderboard_url(t.id)
+        url = self._status_url(t.id)
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("leaderboard", response.data)
         self.assertEqual(len(response.data["leaderboard"]), 2)
 
         for entry in response.data["leaderboard"]:
@@ -149,34 +172,35 @@ class TournamentStatusLeaderboardTests(APITestCase):
         pc = self._create_participant(t, pC)
 
         # Games:
-        # A beats B (A +2)
+        # A beats B (A +2, B +0)
         Game.objects.create(
             tournament=t,
             home_participant=pa,
             away_participant=pb,
-            home_score=1,
-            away_score=0,
+            home_score=2,  # A wins -> 2 points
+            away_score=0,  # B loses -> 0 points
         )
         # B draws C (B +1, C +1)
         Game.objects.create(
             tournament=t,
             home_participant=pb,
             away_participant=pc,
-            home_score=1,
+            home_score=1,  # draw -> both get 1 point
             away_score=1,
         )
-        # C beats A (C +2)
+        # C beats A (C +2, A +0)
         Game.objects.create(
             tournament=t,
             home_participant=pc,
             away_participant=pa,
-            home_score=1,
-            away_score=0,
+            home_score=2,  # C wins -> 2 points
+            away_score=0,  # A loses -> 0 points
         )
 
-        url = self._leaderboard_url(t.id)
+        url = self._status_url(t.id)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("leaderboard", response.data)
 
         leaderboard = response.data["leaderboard"]
         # Expected points:
