@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Tournament, TournamentParticipant, Game
 from players.models import Player
-
+from rest_framework.exceptions import NotFound
 
 class TournamentsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -25,6 +25,4 @@ class AddParticipantSerializer(serializers.Serializer):
     player_id = serializers.IntegerField()
 
     def validate_player_id(self, value):
-        if not Player.objects.filter(id=value).exists():
-            raise serializers.ValidationError("Player with this ID does not exist.")
         return value
